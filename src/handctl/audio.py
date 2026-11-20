@@ -252,6 +252,162 @@ class Reverb:
         return x * (1 - self.mix) + wet * self.mix
 
 
+# ---------------------------------------------------------------- looper
+
+def _click(freq: float, amp: float) -> np.ndarray:
+    t = np.arange(int(SR * 0.03)) / SR
+    return (np.sin(2 * np.pi * freq * t) * np.exp(-t * 180) * amp).astype(np.float32)
+
+
+class Looper:
+    """Looper de audio sincronizado a un tempo. Graba lo que suenan las voces
+    (en seco, sin el propio bucle) en capas de un largo fijo de compases y las
+    reproduce en bucle. Corre dentro del callback del motor.
+
+    Desde el hilo de control solo se llaman los métodos públicos; el estado
+    que cruza hilos son asignaciones simples."""
+
+    BEATS_PER_BAR = 4
+    MAX_LAYERS = 16  # cada capa ocupa hasta ~7 MB (4 compases a 50 BPM)
+
+    def __init__(self):
+        self.bpm = 90
+        self.bars = 2
+        self.metronome = True
+        self.volume = 0.9
+        self.layers: list[np.ndarray] = []
+        self.mix: np.ndarray | None = None   # suma de las capas (L, 2)
+        self.playing = False
+        self.pos = 0                          # posición en el bucle (muestras)
+        self.countin = 0                      # muestras de cuenta previa restantes
+        self.armed = False                    # grabar en la próxima vuelta
+        self.recording: np.ndarray | None = None
+        self._clicks: list[list] = []         # [buffer, posición]
+        self._accent, self._beat = _click(1760, 0.5), _click(1180, 0.32)
+
+    # ---------- medidas ----------
+
+    @property
+    def beat_len(self) -> int:
+        return int(SR * 60 / self.bpm)
+
+    @property
+    def length(self) -> int:
+        return self.beat_len * self.BEATS_PER_BAR * self.bars
+
+    def beat_now(self) -> float:
+        """Pulso actual (con fracción) dentro del bucle, para dibujar."""
+        if self.countin > 0:
+            return -self.countin / self.beat_len
+        return self.pos / self.beat_len
+
+    @property
+    def state(self) -> str:
+        if self.countin > 0:
+            return "cuenta"
+        if self.recording is not None:
+            return "grabando"
+        if self.armed:
+            return "armado"
+        return "sonando" if self.playing else "parado"
+
+    # ---------- control (hilo de control) ----------
+
+    def set_tempo(self, bpm: int) -> None:
+        if not self.layers and self.recording is None:  # con capas grabadas no se puede
+            self.bpm = int(min(max(bpm, 50), 180))
+
+    def record(self) -> None:
+        """Botón grabar: arma una capa nueva; con el bucle vacío, cuenta 1 compás.
+        Mientras graba, vuelve a tocarlo para cancelar esa capa."""
+        if len(self.layers) >= self.MAX_LAYERS and self.recording is None and not self.armed:
+            return
+        if self.recording is not None or self.armed or self.countin > 0:
+            self.recording, self.armed, self.countin = None, False, 0
+            if not self.layers:
+                self.playing = False
+            return
+        if not self.playing:
+            self.pos = 0
+            self.countin = self.beat_len * self.BEATS_PER_BAR
+            self.playing = True
+        self.armed = True
+
+    def toggle_play(self) -> None:
+        if self.playing:
+            self.playing, self.armed, self.recording, self.countin = False, False, None, 0
+        elif self.layers:
+            self.pos, self.playing = 0, True
+
+    def undo(self) -> None:
+        if self.recording is not None or self.armed:
+            self.recording, self.armed = None, False
+            return
+        if self.layers:
+            last = self.layers.pop()
+            self.mix = self.mix - last if self.layers else None
+            if not self.layers:
+                self.playing = False
+
+    def clear(self) -> None:
+        self.playing, self.armed, self.recording, self.countin = False, False, None, 0
+        self.layers, self.mix = [], None
+
+    # ---------- audio (hilo de audio) ----------
+
+    def _schedule_clicks(self, a: int, m: int, offset: int) -> None:
+        """Clics de metrónomo que caen en [a, a+m) de la línea de tiempo."""
+        bl = self.beat_len
+        k = -(-a // bl)  # primer pulso >= a
+        while k * bl < a + m:
+            accent = k % self.BEATS_PER_BAR == 0
+            self._clicks.append([self._accent if accent else self._beat, -(offset + k * bl - a)])
+            k += 1
+
+    def process(self, live_l: np.ndarray, live_r: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        n = len(live_l)
+        out = np.zeros((n, 2))
+        i = 0
+        while i < n and self.playing:
+            if self.countin > 0:  # cuenta previa: solo metrónomo
+                m = min(self.countin, n - i)
+                total = self.beat_len * self.BEATS_PER_BAR
+                self._schedule_clicks(total - self.countin, m, i)
+                self.countin -= m
+                i += m
+                continue
+            if self.pos == 0 and self.armed:
+                self.recording, self.armed = np.zeros((self.length, 2), np.float32), False
+            m = min(self.length - self.pos, n - i)
+            if self.metronome or self.recording is not None and not self.layers:
+                self._schedule_clicks(self.pos, m, i)
+            if self.mix is not None:
+                out[i:i + m] += self.mix[self.pos:self.pos + m] * self.volume
+            rec = self.recording
+            if rec is not None:
+                rec[self.pos:self.pos + m, 0] = live_l[i:i + m]
+                rec[self.pos:self.pos + m, 1] = live_r[i:i + m]
+            self.pos += m
+            i += m
+            if self.pos >= self.length:
+                self.pos = 0
+                if rec is not None and self.recording is rec:
+                    self.layers.append(rec)
+                    self.mix = rec.copy() if self.mix is None else self.mix + rec
+                    self.recording = None
+        # Clics (pueden cruzar bloques).
+        for c in self._clicks:
+            buf, p = c
+            start = max(-p, 0)
+            src = max(p, 0)
+            chunk = buf[src:src + n - start]
+            out[start:start + len(chunk), 0] += chunk
+            out[start:start + len(chunk), 1] += chunk
+            c[1] = p + n
+        self._clicks = [c for c in self._clicks if c[1] < len(c[0])]
+        return out[:, 0], out[:, 1]
+
+
 # ---------------------------------------------------------------- motor
 
 class Engine:
@@ -259,6 +415,7 @@ class Engine:
         self.voices: list[Voice] = []
         self.master = 0.8
         self.reverb = Reverb()
+        self.looper = Looper()  # persiste entre apps: el bucle sigue sonando
         self._lock = threading.Lock()
         self._stream = None
 
@@ -306,6 +463,10 @@ class Engine:
         if any(v.done for v in voices):
             with self._lock:
                 self.voices = [v for v in self.voices if not v.done]
+        # El looper graba en seco lo que suenan las voces y le suma el bucle.
+        loop_l, loop_r = self.looper.process(left, right)
+        left += loop_l
+        right += loop_r
         mid = self.reverb((left + right) * 0.5)
         out[:, 0] = np.tanh((left * 0.6 + mid * 0.4) * self.master)
         out[:, 1] = np.tanh((right * 0.6 + mid * 0.4) * self.master)

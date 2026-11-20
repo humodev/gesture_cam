@@ -78,3 +78,52 @@ def text(p: QPainter, rect: QRectF, s: str, size: int = 14, color: QColor = TEXT
     p.setPen(color)
     p.setFont(QFont("Sans", size, QFont.Weight.Bold if bold else QFont.Weight.Normal))
     p.drawText(rect, align, s)
+
+
+class Dwell:
+    """Botones que se activan dejando la mano quieta encima un instante (sin
+    pellizcar). Una vez disparado, hay que salir del botón para repetirlo."""
+
+    def __init__(self, seconds: float = 0.6):
+        self.seconds = seconds
+        self._target: dict[str, list] = {}  # side → [clave, t0, disparado]
+
+    def update(self, pointers: dict, buttons: dict, now: float) -> list:
+        """pointers: side → QPointF; buttons: clave → QRectF. Devuelve claves disparadas."""
+        fired = []
+        for side, pt in pointers.items():
+            key = next((k for k, r in buttons.items() if r.contains(pt)), None)
+            cur = self._target.get(side)
+            if cur is None or cur[0] != key:
+                self._target[side] = [key, now, False]
+            elif key is not None and not cur[2] and now - cur[1] >= self.seconds:
+                cur[2] = True
+                fired.append(key)
+        for side in [s for s in self._target if s not in pointers]:
+            del self._target[side]
+        return fired
+
+    def progress(self, key, now: float) -> float:
+        best = 0.0
+        for k, t0, done in self._target.values():
+            if k == key and not done:
+                best = max(best, min((now - t0) / self.seconds, 1.0))
+        return best
+
+    def hovered(self, key) -> bool:
+        return any(t[0] == key for t in self._target.values())
+
+
+def paint_button(p: QPainter, rect: QRectF, label: str, progress: float = 0.0,
+                 active: bool = False, hovered: bool = False, color: QColor | None = None,
+                 size: int = 14) -> None:
+    """Botón con relleno de progreso de "mano quieta"."""
+    base = color or (QColor(40, 120, 200, 235) if active else QColor(32, 36, 48, 235))
+    p.setPen(QPen(QColor(255, 255, 255, 160 if hovered else 40), 2 if hovered else 1))
+    p.setBrush(base)
+    p.drawRoundedRect(rect, 12, 12)
+    if progress > 0:
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QColor(255, 255, 255, 70))
+        p.drawRoundedRect(QRectF(rect.x(), rect.y(), rect.width() * progress, rect.height()), 12, 12)
+    text(p, rect, label, size, TEXT, bold=active)

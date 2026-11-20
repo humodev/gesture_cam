@@ -99,17 +99,34 @@ abierta handctl no mueve el mouse ni escribe, las manos son de la app.
 **✊ Puño quieto** la cierra; 👍 pausa como siempre. (Las apps se dibujan en
 el overlay, así que con `--window` no están disponibles.)
 
+#### ✎ Pizarrón
+
+Para escribir o marcar sobre la pantalla (por ejemplo, al compartir pantalla).
+El fondo es transparente: se ve lo que hay debajo.
+
+- **Dibujar:** ☝ señalá con el índice (los otros dedos cerrados), o pellizcá
+  índice y pulgar. **Mano abierta** = levantar el lápiz.
+- **Herramientas** (barra a la derecha, índice quieto ½ s encima): colores,
+  grosor, lápiz, resaltador, **láser** (trazo que se borra solo), borrador,
+  deshacer, borrar todo, fondo (transparente / oscuro / blanco) y 💾 guardar
+  como PNG en `~/Imágenes`.
+- Los trazos quedan mientras handctl esté abierto, aunque cierres la app.
+- La cámara en miniatura de la esquina también sale al compartir pantalla:
+  ocultala desde el ícono de la bandeja si molesta.
+
 #### Instrumentos
 
-Todo el sonido lo genera handctl (sin samples ni programas externos), afinado
-en Do mayor / pentatónica para que no haya notas "feas".
+Todo el sonido lo genera handctl (sin samples ni programas externos). Los
+botones de los instrumentos se activan **dejando la mano quieta encima** un
+instante, sin pellizcar.
 
 | App | Cómo se toca |
 |---|---|
+| 🥁 **Octapad** | 8 pads que se tocan **golpeando hacia abajo** en el aire, como un tambor: suena el pad donde la mano frena, más rápido = más fuerte. Kits: Batería, Electrónica, Percusión, Marimba, Acordes, Guitarra. |
 | 〰 **Theremín** | Izquierda↔derecha = nota (Do3–Do5), altura = volumen (abajo de todo, silencio). Cada mano es una voz. Pellizco índice: afinado a la escala ↔ glissando libre. |
-| ▦ **Acordes** | Mano sobre un acorde: pellizco índice = colchón sostenido mientras dure; pellizco medio = rasguido. Dos manos, dos acordes. |
 | ◈ **Sinte XY** | Pellizco índice = suena un arpegio. ← → acorde, ↑ ↓ brillo. Altura de la otra mano = velocidad. Pellizco medio = octava arriba. |
 | ≋ **Cuerdas en el aire** | Pasá la punta del índice o medio por una cuerda para tocarla (más rápido = más fuerte). Pellizco índice en una punta: estirar/achicar (más larga = más grave); en el centro: mover. Crear: pellizco medio y arrastrar, o pellizco índice con las dos manos y estirar. Achicarla hasta casi nada la borra. |
+| 🔁 **Estudio (looper)** | Barra arriba: elegís instrumento (abajo se toca como siempre), **● Grabar** (cuenta 1 compás con metrónomo y graba una vuelta; cada grabación se suma como capa), ▶/■, ↶ deshacer capa, ✕ borrar, metrónomo, tempo −/+ y largo (1, 2 o 4 compases). El bucle sigue sonando aunque cambies de instrumento o cierres el estudio. Máximo 16 capas. |
 
 ### Cursor de precisión
 

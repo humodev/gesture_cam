@@ -15,8 +15,10 @@ def register(cls: type[GestureApp]) -> type[GestureApp]:
 
 def load_apps() -> list[type[GestureApp]]:
     """Importa los módulos que registran apps (lo llama el host al arrancar)."""
-    if not APPS and importlib.util.find_spec(f"{__name__}.instruments"):
-        importlib.import_module(f"{__name__}.instruments")  # se registran al importarse
+    if not APPS:
+        for mod in ("whiteboard", "instruments"):  # se registran al importarse
+            if importlib.util.find_spec(f"{__name__}.{mod}"):
+                importlib.import_module(f"{__name__}.{mod}")
     return APPS
 
 

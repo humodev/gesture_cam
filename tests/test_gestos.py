@@ -31,6 +31,10 @@ def hand(ox: float, oy: float, pose: str = "open"):
         for i, p in zip((8, 12, 16, 20), ((-.04, .06), (0, .06), (.03, .07), (.06, .09))):
             pts[i] = p
         pts[4] = (-.02, .05) if pose == "fist" else (-.08, -.04)
+    elif pose == "point":  # señalar: índice estirado, el resto cerrado
+        for i, p in zip((12, 16, 20), ((0, .06), (.03, .07), (.06, .09))):
+            pts[i] = p
+        pts[4] = (-.02, .05)
     elif pose == "v":
         pts[16], pts[20] = (.03, .07), (.06, .09)
     return [NS(x=ox + x, y=oy + y, z=0.0) for x, y in pts]
@@ -330,7 +334,7 @@ def test_items_personalizados():
 def test_instrumentos_registrados():
     from handctl.apps import load_apps
     names = {cls.name for cls in load_apps()}
-    assert {"theremin", "acordes", "sinte", "cuerdas"} <= names
+    assert {"pizarron", "octapad", "theremin", "sinte", "cuerdas", "estudio"} <= names, names
 
 
 if __name__ == "__main__":
