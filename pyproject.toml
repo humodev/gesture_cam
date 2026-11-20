@@ -16,6 +16,7 @@ dependencies = [
     "nvidia-cudnn-cu12>=9,<10",
     "opencv-python>=5.1.0.95",
     "pyqt6>=6.12.1",
+    "scipy>=1.18.1",
 ]
 
 [project.scripts]
