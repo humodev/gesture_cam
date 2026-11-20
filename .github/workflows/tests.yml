@@ -22,9 +22,17 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libportaudio2 libgl1 libegl1 libxkbcommon0 libfontconfig1 libdbus-1-3 libglib2.0-0t64
       - name: Dependencias (sin CUDA)
         run: uv sync --python 3.12 --no-install-package nvidia-cublas-cu12 --no-install-package nvidia-cudnn-cu12
-      - name: Backends de entrada
-        run: uv run --no-sync python tests/test_plataformas.py
-      - name: Gestos
-        run: uv run --no-sync python tests/test_gestos.py
-      - name: Instrumentos y apps
-        run: uv run --no-sync python tests/test_instrumentos.py
+      - name: Pruebas
+        shell: bash
+        run: |
+          status=0
+          for t in plataformas gestos instrumentos; do
+            echo "== $t"
+            uv run --no-sync python tests/test_$t.py > out_$t.txt 2>&1 || status=1
+            cat out_$t.txt
+            # Errores visibles como anotaciones (públicas) en la página del commit.
+            if grep -qE "^FALLA|Traceback|Error" out_$t.txt; then
+              grep -vE "^(W0000|I0000|INFO|WARNING)" out_$t.txt | tail -15 | sed "s/^/::error title=$t::/"
+            fi
+          done
+          exit $status
