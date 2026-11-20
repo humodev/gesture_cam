@@ -15,8 +15,9 @@ uv run handctl --window     # ventana de vista previa clásica en vez del overla
 ```
 
 Por defecto todo se ve en un **overlay**: una capa transparente encima de la
-pantalla que no recibe foco ni clics. Muestra el teclado grande abajo, un aro
-de pellizco alrededor del cursor y la cámara en miniatura arriba a la derecha.
+pantalla que no recibe foco ni clics. Muestra un aro de pellizco alrededor del
+cursor, el menú, el teclado grande abajo, el estado del dictado y la cámara en
+miniatura arriba a la derecha.
 
 Salir o pausar: ícono de handctl en la bandeja del sistema, o `Ctrl+C` en la terminal.
 
@@ -45,16 +46,58 @@ bajala o sacala de la zona y la otra sigue sola.
 | pellizco pulgar + medio | clic derecho | borrar |
 | pellizco pulgar + anular (mantener) | **dictar**: hablá y soltá | dictar |
 | mano en **V** + subir/bajar | scroll suave con inercia | — |
-| ✊ **puño** (mantener ½ s) | abrir teclado | cerrar teclado |
+| ✊ **puño quieto** (mantener ½ s) | abrir el **menú** | cerrar teclado |
 | 👍 **pulgar arriba** (mantener ~1 s) | pausa / reanudar | pausa / reanudar |
 | mano abierta, deslizar rápido (la que **no** tiene el cursor) | ← → escritorio · ↑ vista general · ↓ escritorio | — |
 
 - Los pellizcos cuentan si los otros dedos no están cerrados (así, cerrar el
   puño no hace clic).
-- Mientras mantenés puño o pulgar arriba, una barra arriba en la pantalla
-  muestra cuánto falta.
+- Puño y pulgar arriba cuentan con la mano **quieta**: si la mano se desplaza
+  mientras los hacés (agarrando algo, bajándola a descansar) el conteo vuelve
+  a empezar.
+- Mientras mantenés puño o pulgar arriba, un aro blanco alrededor del cursor y
+  una barra arriba en la pantalla muestran cuánto falta y qué va a pasar.
 - En la pantalla, un **aro** alrededor del cursor se llena a medida que acercás
-  el pulgar a un dedo. El color indica qué dedo y lleno = pellizco.
+  el pulgar a un dedo. El color indica qué dedo y lleno = pellizco (al lado
+  dice "clic", "clic der." o "dictado").
+- Deslizar vale si la mano **sigue en la zona** un instante después: bajarla
+  a descansar o sacarla de cuadro rápido no cambia de escritorio.
+
+### Menú (lanzador)
+
+✊ **Puño quieto ½ s** en modo mouse abre un menú circular alrededor del
+cursor. El cursor queda quieto mientras está abierto.
+
+1. **Abrí la mano** (el punto del centro se pone de color: el menú está listo).
+2. **Movela hacia la opción** que querés: se resalta en azul. No hace falta
+   un gran recorrido; en el centro no hay nada elegido.
+3. **Pellizcá** (pulgar con cualquier dedo) para elegir.
+
+Para cerrarlo sin hacer nada: pellizco en el centro, otro puño, o esperá unos
+segundos. Opciones por defecto (en sentido horario desde arriba):
+
+| Opción | Qué hace |
+|---|---|
+| 📋 Copiar · 📥 Pegar · ↶ Deshacer | `Ctrl+C` · `Ctrl+V` · `Ctrl+Z` |
+| ✕ Cerrar pestaña | `Ctrl+W` |
+| ⏯ Play / pausa | tecla multimedia (música, videos) |
+| 🔊 Volumen | subí o bajá la mano: cada marca es un paso; pellizcá para terminar |
+| 🎤 Dictar | dictado **manos libres**: graba hasta que pellizcás (podés bajar las manos mientras hablás) |
+| ⌨ Teclado | teclado en pantalla (puño para cerrarlo) |
+| 🎵 Apps | lista de apps a pantalla completa (ver abajo) |
+| ? Ayuda | tarjeta con todos los gestos |
+
+Se cambian con `launcher_items` en el config (nombres en
+`src/handctl/launcher.py`, p.ej. `vista_general`, `escritorio_izq`,
+`siguiente`, `silencio`, `guardar`) y se pueden agregar atajos propios como
+`"Reabrir=ctrl+shift+t"`.
+
+### Apps
+
+Menú → 🎵 **Apps** → elegí una. La app ocupa la pantalla: mientras está
+abierta handctl no mueve el mouse ni escribe, las manos son de la app.
+**✊ Puño quieto** la cierra; 👍 pausa como siempre. (Las apps se dibujan en
+el overlay, así que con `--window` no están disponibles.)
 
 ### Cursor de precisión
 
@@ -64,10 +107,13 @@ Si movés la mano despacio, el cursor se mueve ~1/3 de lo que movés la mano
 ### Escribir
 
 1. En modo mouse, hacé clic en el campo de texto de destino.
-2. Puño → teclado. Con dos manos hay dos cursores: cada mano
-   escribe con su propio pellizco.
-3. Para textos largos, mejor **dictar**: mantené el pellizco con el anular,
-   hablá y soltá. El texto se pega en la ventana con foco, con tildes y ñ.
+2. Para textos, **dictar**: mantené el pellizco con el anular, hablá y
+   soltá; o, para textos largos, Menú → 🎤 **Dictar**, hablá con las manos
+   libres y pellizcá para terminar. El texto se pega en la ventana con foco,
+   con tildes y ñ. Mientras graba, arriba en la pantalla se ve "grabando" y
+   el nivel del micrófono.
+3. Para retoques: Menú → ⌨ **Teclado**. Con dos manos hay dos cursores: cada
+   mano escribe con su propio pellizco.
 
 Las teclas van a la ventana con foco. El overlay nunca toma el foco, así que
 podés escribir en cualquier app que esté debajo.
@@ -85,9 +131,16 @@ voice_paste = "ctrl+shift+v"  # si dictás sobre todo en la terminal
 swipe_up = "meta+tab"
 overlay_screen = "HDMI-A-1"   # monitor del overlay (vacío = principal)
 overlay_preview_width = 0     # ocultar la cámara en miniatura
+launcher_items = ["copiar", "pegar", "deshacer", "play_pausa", "volumen", "dictar", "apps", "Reabrir=ctrl+shift+t"]
 ```
 
 Todas las claves, con su explicación, están en `src/handctl/config.py`.
+
+## Pruebas
+
+```fish
+uv run python tests/test_gestos.py   # lógica de gestos con manos sintéticas (sin cámara)
+```
 
 ## Limitaciones
 

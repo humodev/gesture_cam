@@ -5,10 +5,14 @@ apoyada fuera de la zona queda en reposo y se ignora. Cualquier mano en juego
 sola hace todo. Si hay dos, la que ya tenía el cursor lo conserva y la otra
 suma clics, scroll, dictado y deslizamientos. En modo teclado cada mano en
 juego tiene su propio cursor.
+
+Modos: "mouse", "keyboard", "launcher" (menú radial, ver launcher.py) y "app"
+(una GestureApp a pantalla completa recibe las manos; ver apps/base.py).
 """
 
 import math
 import threading
+import traceback
 from collections import deque
 
 from evdev import ecodes as e
@@ -18,7 +22,9 @@ from .gestures import (Debounced, PinchDetector, curled_count, finger_states, ha
                        is_open_hand, is_v_pose, palm_center, pinch_ratios, to_points)
 
 NO_PINCH = {"index": 9.9, "middle": 9.9, "ring": 9.9, "pinky": 9.9}
+from .apps import AppContext
 from .keyboard import ROWS, OnScreenKeyboard
+from .launcher import Launcher
 from .pointer import PrecisionCursor
 
 BACKSPACE = next(k for row in ROWS for k in row if k.code == e.KEY_BACKSPACE)
@@ -47,6 +53,7 @@ class HandTrack:
         self.pose: str | None = None   # "fist" / "thumbs_up" confirmada
         self.pose_t0 = 0.0
         self.pose_fired = False
+        self._pose_anchor = (0.0, 0.0)
         self._pose_raw: str | None = None
         self._pose_count = 0
         self.repeat_key = None
@@ -68,6 +75,13 @@ class HandTrack:
         self.ratios, self.states = pinch_ratios(pts), finger_states(pts)
         raw_pose = hand_pose(pts, self.states)
         self._update_pose(raw_pose, now)
+        if self.pose and not self.pose_fired:
+            # Pose mantenida pero con la mano en movimiento (agarrando algo,
+            # yendo a descansar): el conteo vuelve a empezar.
+            aspect = cfg.cam_width / cfg.cam_height
+            ax, ay = self._pose_anchor
+            if math.hypot((cx - ax) * aspect, cy - ay) > cfg.pose_still:
+                self.pose_t0, self._pose_anchor = now, (cx, cy)
         # Si los otros tres dedos están cerrados es un puño formándose, no un
         # pellizco: así cerrar la mano no hace clic.
         closest = min(self.ratios, key=self.ratios.get)
@@ -90,6 +104,7 @@ class HandTrack:
         self._pose_raw = raw
         if self._pose_count >= 3:
             self.pose, self.pose_t0, self.pose_fired = raw, now, False
+            self._pose_anchor = self.palm
             self._pose_count = 0
 
     def pose_progress(self, now: float) -> float:
@@ -98,11 +113,15 @@ class HandTrack:
         hold = self.cfg.mode_hold_s if self.pose == "fist" else self.cfg.pause_hold_s
         return min((now - self.pose_t0) / hold, 1.0)
 
+    def in_zone(self) -> bool:
+        """La palma está AHORA dentro de la zona de juego (sin la demora de `engaged`)."""
+        (zx0, zx1), (zy0, zy1) = self.cfg.engage_zone_x, self.cfg.engage_zone_y
+        cx, cy = self.palm
+        return self.present and zx0 <= cx <= zx1 and zy0 <= cy <= zy1
+
     def _update_engagement(self, now: float) -> None:
         cfg = self.cfg
-        (zx0, zx1), (zy0, zy1) = cfg.engage_zone_x, cfg.engage_zone_y
-        cx, cy = self.palm
-        inside = zx0 <= cx <= zx1 and zy0 <= cy <= zy1
+        inside = self.in_zone()
         if inside == self.engaged:
             self._zone_switch_t = None
             return
@@ -163,10 +182,23 @@ class Controller:
         self.scroll_vel = 0.0
         self.inertia = 0.0
         self.swipe_ready_at = 0.0
+        self.swipe_pending: tuple[HandTrack, str, float] | None = None  # mano, atajo, cuándo
         self.rec_hand: HandTrack | None = None
+        self.rec_free = False   # dictado "manos libres" (desde el lanzador)
         self.osk = OnScreenKeyboard()
         self.kb_rect = (0, 0, 1, 1)
+        self.launcher = Launcher(cfg)
+        self.launcher.can_dictate = dictation is not None
+        self.app = None         # GestureApp abierta
+        self.app_error = ""
+        # Área para apps en px del overlay; None = no se pueden abrir (modo --window).
+        self.app_rect: tuple[int, int, int, int] | None = None
+        self.flash_text, self.flash_until = "", 0.0   # aviso breve en pantalla
         self._last_t = None
+
+    def set_apps(self, apps: list) -> None:
+        """Apps que ofrece el lanzador (solo si hay dónde dibujarlas)."""
+        self.launcher.apps = list(apps) if self.app_rect else []
 
     # ---------- asignación de manos ----------
 
@@ -207,9 +239,10 @@ class Controller:
         """Suelta todo lo que esté en curso (al cambiar de modo/manos/pausa)."""
         self.mouse.release_all()
         self.scroll_hand, self.inertia = None, 0.0
+        self.swipe_pending = None
         if self.dictation and self.dictation.state == "recording":
             self.dictation.stop()
-        self.rec_hand = None
+        self.rec_hand, self.rec_free = None, False
         for t in self.tracks.values():
             t.pinch.reset()
             t.repeat_key = None
@@ -242,28 +275,43 @@ class Controller:
             self.pointer = pointer
         self.helpers = [t for t in engaged if t is not self.pointer]
 
+        if self.rec_free:  # antes que nada: ese pellizco no debe hacer otra cosa
+            self._free_dictation(engaged)
         for hand in engaged:
             self._common_gestures(hand, now)
         if self.paused:
+            if self.app:  # pausado: la app ve "sin manos" (suelta notas, etc.)
+                self._app_update([], now)
             return
-        if self.mode == "mouse":
+        if self.mode == "app":
+            self._app_update(engaged, now)
+        elif self.mode == "launcher":
+            self._launcher(engaged, now)
+        elif self.mode == "mouse":
             self._mouse(engaged, now, dt)
         else:
             self._keyboard(engaged, now)
 
     # ---------- gestos comunes a ambos modos ----------
 
+    def fist_action(self) -> str:
+        """Qué hace ✊ mantenido en el modo actual (también para el overlay)."""
+        return {"mouse": "abrir menú", "keyboard": "cerrar teclado",
+                "launcher": "cerrar menú", "app": "cerrar app"}[self.mode]
+
     def _common_gestures(self, hand: HandTrack, now: float) -> None:
-        """Poses mantenidas (puño = teclado, pulgar arriba = pausa) y anular (dictado)."""
+        """Poses mantenidas (puño = lanzador/cerrar, pulgar arriba = pausa) y anular (dictado)."""
         if hand.pose and not hand.pose_fired and hand.pose_progress(now) >= 1.0:
             hand.pose_fired = True
             if hand.pose == "thumbs_up":
                 self._drop_actions()
+                self.launcher.close()
+                if self.mode == "launcher":
+                    self.mode = "mouse"
                 self.paused = not self.paused
             elif not self.paused:
-                self._drop_actions()
-                self.mode = "keyboard" if self.mode == "mouse" else "mouse"
-        if self.paused or not self.dictation:
+                self._fist(hand, now)
+        if self.paused or not self.dictation or self.mode in ("app", "launcher"):
             return
         if hand.started == "ring" and self.rec_hand is None:
             self.dictation.start()
@@ -271,6 +319,104 @@ class Controller:
         elif hand.ended == "ring" and hand is self.rec_hand:
             self.dictation.stop()
             self.rec_hand = None
+
+    def _fist(self, hand: HandTrack, now: float) -> None:
+        if self.mode == "app":
+            self.close_app()
+        elif self.mode == "launcher":
+            self.launcher.close()
+            self._back_to_mouse()
+        elif self.mode == "keyboard":
+            self._drop_actions()
+            self._back_to_mouse()
+        else:
+            self._drop_actions()
+            self.mode = "launcher"
+            self.launcher.open(hand, now)
+
+    def _back_to_mouse(self) -> None:
+        self.mode = "mouse"
+        self.cursor.detach()  # sin salto: el cursor sigue desde donde quedó
+
+    def flash(self, text: str, now: float, seconds: float = 1.2) -> None:
+        self.flash_text, self.flash_until = text, now + seconds
+
+    def _free_dictation(self, engaged) -> None:
+        """Dictado manos libres: cualquier pellizco lo termina (y no hace clic)."""
+        if not (self.dictation and self.dictation.state == "recording"):
+            self.rec_free = False
+            return
+        for hand in engaged:
+            if hand.started:
+                self.dictation.stop()
+                self.rec_free = False
+                hand.started = None  # este pellizco solo termina el dictado (sin clic)
+                return
+
+    # ---------- lanzador ----------
+
+    def _launcher(self, engaged, now: float) -> None:
+        for item in self.launcher.update(engaged, now):
+            self._run_item(item, now)
+        if not self.launcher.active and self.mode == "launcher":
+            self._back_to_mouse()
+
+    def _run_item(self, item, now: float) -> None:
+        if item.kind == "combo":
+            self.kbd.combo(item.combo)
+            if item.title:
+                self.flash(f"{item.icon}  {item.title}", now)
+        elif item.kind == "keyboard":
+            self.mode = "keyboard"
+        elif item.kind == "dictate" and self.dictation:
+            self.dictation.start()
+            self.rec_free = self.dictation.state == "recording"
+            if not self.rec_free:
+                self.flash(self.dictation.message or "dictado no disponible", now, 2.5)
+        elif item.kind == "app":
+            self.open_app(item.app, now)
+
+    # ---------- apps ----------
+
+    def open_app(self, cls, now: float) -> None:
+        if not self.app_rect:
+            return
+        self._drop_actions()
+        x, y, w, h = self.app_rect
+        (rx0, rx1), (ry0, ry1) = self.cfg.region_x, self.cfg.region_y
+
+        def to_screen(xc: float, yc: float) -> tuple[float, float]:
+            return (x + (xc - rx0) / (rx1 - rx0) * w, y + (yc - ry0) / (ry1 - ry0) * h)
+
+        try:
+            app = cls()
+            app.open(AppContext(self.cfg, self.app_rect, to_screen))
+        except Exception:
+            traceback.print_exc()
+            self.flash(f"no se pudo abrir {getattr(cls, 'title', cls.__name__)}", now, 3.0)
+            self._back_to_mouse()
+            return
+        self.app, self.mode, self.app_error = app, "app", ""
+        self.launcher.close()
+
+    def close_app(self) -> None:
+        app, self.app = self.app, None
+        if app is not None:
+            try:
+                app.close()
+            except Exception:
+                traceback.print_exc()
+        self._drop_actions()
+        self._back_to_mouse()
+
+    def _app_update(self, engaged, now: float) -> None:
+        try:
+            self.app.update(engaged, now)
+        except Exception:
+            traceback.print_exc()
+            self.app_error = f"la app {self.app.title} falló y se cerró"
+            self.flash(self.app_error, now, 4.0)
+            self.close_app()
 
     # ---------- modo mouse ----------
 
@@ -303,6 +449,7 @@ class Controller:
             self._scroll(hand, now, dt)
             if hand is not pointer:  # la mano del cursor se mueve rápido a propósito
                 self._swipe(hand, now)
+        self._confirm_swipe(now)
 
         if self.inertia and not self.scroll_hand:
             self.mouse.scroll_hires(self.inertia * dt)
@@ -333,7 +480,7 @@ class Controller:
 
     def _swipe(self, hand: HandTrack, now: float) -> None:
         cfg = self.cfg
-        if (now < self.swipe_ready_at or now - hand.engaged_at < 0.4
+        if (self.swipe_pending or now < self.swipe_ready_at or now - hand.engaged_at < 0.4
                 or hand.pinch.active or not is_open_hand(hand.states)):
             return
         vx, vy = hand.palm_velocity()
@@ -343,8 +490,20 @@ class Controller:
         elif abs(vy) > cfg.swipe_speed and abs(vy) > 2 * abs(vx):
             combo = cfg.swipe_down if vy > 0 else cfg.swipe_up
         if combo:
-            self.kbd.combo(combo)
+            self.swipe_pending = (hand, combo, now)
             self.swipe_ready_at = now + cfg.swipe_cooldown_s
+
+    def _confirm_swipe(self, now: float) -> None:
+        """El deslizamiento vale si al rato la mano sigue en la zona: si se fue
+        a descansar (abajo) o salió de cuadro, era eso y no un gesto."""
+        if not self.swipe_pending:
+            return
+        hand, combo, t = self.swipe_pending
+        if now - t < self.cfg.swipe_confirm_s:
+            return
+        self.swipe_pending = None
+        if hand.in_zone() and now - hand.last_seen < 0.1:
+            self.kbd.combo(combo)
 
     # ---------- modo teclado ----------
 

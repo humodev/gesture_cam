@@ -5,6 +5,7 @@ import os
 os.environ.setdefault("QT_QPA_PLATFORM", "xcb")  # la ventana de OpenCV corre sobre XWayland
 
 import argparse
+import math
 import unicodedata
 from pathlib import Path
 
@@ -15,6 +16,7 @@ from .capture import MODEL_PATH, HandCapture
 from .config import CONFIG_PATH, load_config
 from .controller import Controller
 from .keyboard import KEYCODES
+from .launcher import launcher_combos
 from .vinput import VirtualKeyboard, VirtualMouse, parse_combo, settle
 
 WINDOW = "handctl"
@@ -26,9 +28,12 @@ HAND_CONNECTIONS = [
 FINGER_COLORS = {"index": (0, 200, 255), "middle": (255, 160, 0),
                  "ring": (60, 60, 255), "pinky": (220, 0, 220)}
 HELP = {
-    "mouse": "índice: clic/arrastrar · medio: clic der. · anular: dictar · V: scroll · puño: teclado · pulgar arriba: pausa",
+    "mouse": "índice: clic/arrastrar · medio: clic der. · anular: dictar · V: scroll · puño: menú · pulgar arriba: pausa",
     "keyboard": "índice: tecla · medio: borrar · anular: dictar · puño: cerrar teclado · pulgar arriba: pausa",
+    "launcher": "mové la mano hacia una opción y pellizcá · pellizco al centro o puño: cerrar",
+    "app": "puño: cerrar la app · pulgar arriba: pausa",
 }
+MODE_NAMES = {"mouse": "MOUSE", "keyboard": "TECLADO", "launcher": "MENÚ", "app": "APP"}
 
 
 class _NullDevice:
@@ -75,6 +80,31 @@ def draw_hand(img, track, color, label: str) -> None:
             put(img, name, (center[0] - 40, center[1] - 28), 0.6, (0, 255, 255))
 
 
+def draw_launcher(img, ctl: Controller) -> None:
+    """Menú radial en la vista previa de --window (versión simple del overlay)."""
+    la = ctl.launcher
+    h, w = img.shape[:2]
+    cx, cy, radius = w // 2, h // 2, int(min(w, h) * 0.32)
+    cv2.circle(img, (cx, cy), radius + 40, (20, 20, 20), -1, cv2.LINE_AA)
+    n = len(la.items)
+    for i, item in enumerate(la.items):
+        ang = 2 * math.pi * i / n
+        x, y = int(cx + radius * math.sin(ang)), int(cy - radius * math.cos(ang))
+        color = (210, 130, 30) if i == la.hover else (70, 70, 70)
+        cv2.circle(img, (x, y), 30, color, -1, cv2.LINE_AA)
+        put(img, ascii_text(item.title)[:12], (x - 40, y + 5), 0.45)
+    if la.page == "volume":
+        put(img, f"volumen {la.volume_level:+d} (subi/baja la mano, pellizco = listo)",
+            (cx - 200, cy), 0.55)
+    elif la.page == "help":
+        put(img, "Ayuda: ver README (pellizco = cerrar)", (cx - 170, cy), 0.55)
+    dx, dy = la.dot()
+    color = (0, 255, 0) if la.armed else (120, 120, 120)
+    cv2.circle(img, (int(cx + dx * 50), int(cy + dy * 50)), 10, color, -1, cv2.LINE_AA)
+    if not la.armed:
+        put(img, "abri la mano", (cx - 60, cy + 40), 0.55, (0, 255, 255))
+
+
 def render(frame, ctl: Controller, cfg, fps: float, now: float, width: int, full: bool = True):
     """Vista de cámara anotada. `full=False`: solo manos y zona (miniatura del
     overlay, que dibuja el teclado y el estado por su cuenta)."""
@@ -95,7 +125,9 @@ def render(frame, ctl: Controller, cfg, fps: float, now: float, width: int, full
             color, label = (255, 0, 255), "gestos"
         draw_hand(img, track, color, label)
 
-    if ctl.mode == "mouse":
+    if ctl.mode == "launcher" and full:
+        draw_launcher(img, ctl)
+    elif ctl.mode == "mouse":
         (rx0, rx1), (ry0, ry1) = cfg.region_x, cfg.region_y
         cv2.rectangle(img, (int(rx0 * dw), int(ry0 * dh)), (int(rx1 * dw), int(ry1 * dh)),
                       (255, 200, 0), 1)
@@ -103,7 +135,7 @@ def render(frame, ctl: Controller, cfg, fps: float, now: float, width: int, full
             cx = int((rx0 + ctl.cursor.pos[0] * (rx1 - rx0)) * dw)
             cy = int((ry0 + ctl.cursor.pos[1] * (ry1 - ry0)) * dh)
             cv2.circle(img, (cx, cy), 7, (0, 0, 255), -1, cv2.LINE_AA)
-    elif full:
+    elif full and ctl.mode == "keyboard":
         ctl.osk.draw(img, now)
         for track in ctl.tracks.values():
             if track.engaged:
@@ -138,7 +170,9 @@ SIDE_NAMES = {"left": "izq", "right": "der"}
 
 
 def status_text(ctl: Controller, fps: float) -> str:
-    status = f"{'MOUSE' if ctl.mode == 'mouse' else 'TECLADO'}  {fps:4.1f} fps  "
+    status = f"{MODE_NAMES[ctl.mode]}  {fps:4.1f} fps  "
+    if ctl.app:
+        status = f"APP: {ctl.app.title}  {fps:4.1f} fps  "
     if ctl.pointer:
         status += f"cursor: {SIDE_NAMES[ctl.pointer.side]}"
         if ctl.helpers:
@@ -152,6 +186,8 @@ def status_text(ctl: Controller, fps: float) -> str:
         status += "  PAUSA (pulgar arriba para seguir)"
     elif ctl.scroll_hand:
         status += "  [scroll]"
+    elif ctl.rec_free:
+        status += "  [dictando: pellizcá para terminar]"
     return status
 
 
@@ -199,7 +235,8 @@ def run(cfg, args, capture, display) -> None:
     """Calibración (opcional) + bucle de control. Corre en el hilo que sea."""
     if args.calibrate and not run_calibration(cfg, capture, display.show):
         return
-    combos = [cfg.swipe_left, cfg.swipe_right, cfg.swipe_up, cfg.swipe_down, cfg.voice_paste]
+    combos = [cfg.swipe_left, cfg.swipe_right, cfg.swipe_up, cfg.swipe_down, cfg.voice_paste,
+              *launcher_combos(cfg)]
     combo_codes = {parse_combo(c)[1] for c in combos}
     if args.dry_run:
         mouse, kbd = _NullDevice(), _NullDevice()
@@ -212,7 +249,12 @@ def run(cfg, args, capture, display) -> None:
         dictation = Dictation(cfg, kbd, paste=not args.dry_run)
 
     ctl = Controller(cfg, mouse, kbd, dictation)
-    display.attach(ctl)
+    display.attach(ctl)  # el overlay define ctl.app_rect (en --window no hay apps)
+    from .apps import load_apps
+    try:
+        ctl.set_apps(load_apps())
+    except Exception as ex:  # una app rota no tiene que impedir usar el mouse
+        print(f"No se pudieron cargar las apps: {ex}")
     fps, last = 0.0, None
     try:
         for now, frame, result in capture:
@@ -255,8 +297,12 @@ def main() -> None:
         cfg.camera = args.camera
     if args.voice is not None:
         cfg.voice_enabled = args.voice
-    for combo in (cfg.swipe_left, cfg.swipe_right, cfg.swipe_up, cfg.swipe_down, cfg.voice_paste):
-        parse_combo(combo)  # valida los atajos antes de abrir la cámara
+    try:  # valida los atajos y las opciones del lanzador antes de abrir la cámara
+        for combo in (cfg.swipe_left, cfg.swipe_right, cfg.swipe_up, cfg.swipe_down,
+                      cfg.voice_paste, *launcher_combos(cfg)):
+            parse_combo(combo)
+    except ValueError as ex:
+        raise SystemExit(f"config.toml: {ex}")
 
     capture = HandCapture(cfg, args.model)
     try:
