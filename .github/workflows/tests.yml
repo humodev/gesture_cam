@@ -32,7 +32,7 @@ jobs:
             cat out_$t.txt
             # Errores visibles como anotaciones (públicas) en la página del commit.
             if grep -qE "^FALLA|Traceback|Error" out_$t.txt; then
-              grep -vE "^(W0000|I0000|INFO|WARNING)" out_$t.txt | tail -15 | sed "s/^/::error title=$t::/"
+              grep -E "^FALLA|Error|error" out_$t.txt | tail -4 | sed "s/^/::error title=$t::/"
             fi
           done
           exit $status
