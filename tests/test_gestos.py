@@ -327,9 +327,10 @@ def test_items_personalizados():
         raise AssertionError("opción desconocida debería fallar")
 
 
-def test_contrato_apps_vacio():
+def test_instrumentos_registrados():
     from handctl.apps import load_apps
-    assert APPS == [] and load_apps() == []
+    names = {cls.name for cls in load_apps()}
+    assert {"theremin", "acordes", "sinte", "cuerdas"} <= names
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ from PyQt6.QtGui import QColor, QFont, QPainter, QPen
 from ..base import AppContext, GestureApp
 
 HAND_COLORS = {"left": QColor(255, 90, 200), "right": QColor(80, 220, 255)}
-BG = QColor(8, 8, 14, 215)
+BG = QColor(8, 8, 14, 238)
 TEXT = QColor(235, 235, 240)
 DIM = QColor(150, 150, 165)
 

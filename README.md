@@ -99,6 +99,18 @@ abierta handctl no mueve el mouse ni escribe, las manos son de la app.
 **✊ Puño quieto** la cierra; 👍 pausa como siempre. (Las apps se dibujan en
 el overlay, así que con `--window` no están disponibles.)
 
+#### Instrumentos
+
+Todo el sonido lo genera handctl (sin samples ni programas externos), afinado
+en Do mayor / pentatónica para que no haya notas "feas".
+
+| App | Cómo se toca |
+|---|---|
+| 〰 **Theremín** | Izquierda↔derecha = nota (Do3–Do5), altura = volumen (abajo de todo, silencio). Cada mano es una voz. Pellizco índice: afinado a la escala ↔ glissando libre. |
+| ▦ **Acordes** | Mano sobre un acorde: pellizco índice = colchón sostenido mientras dure; pellizco medio = rasguido. Dos manos, dos acordes. |
+| ◈ **Sinte XY** | Pellizco índice = suena un arpegio. ← → acorde, ↑ ↓ brillo. Altura de la otra mano = velocidad. Pellizco medio = octava arriba. |
+| ≋ **Cuerdas en el aire** | Pasá la punta del índice o medio por una cuerda para tocarla (más rápido = más fuerte). Pellizco índice en una punta: estirar/achicar (más larga = más grave); en el centro: mover. Crear: pellizco medio y arrastrar, o pellizco índice con las dos manos y estirar. Achicarla hasta casi nada la borra. |
+
 ### Cursor de precisión
 
 Si movés la mano despacio, el cursor se mueve ~1/3 de lo que movés la mano
@@ -139,7 +151,8 @@ Todas las claves, con su explicación, están en `src/handctl/config.py`.
 ## Pruebas
 
 ```fish
-uv run python tests/test_gestos.py   # lógica de gestos con manos sintéticas (sin cámara)
+uv run python tests/test_gestos.py        # lógica de gestos con manos sintéticas (sin cámara)
+uv run python tests/test_instrumentos.py  # cada instrumento abierto desde el menú, sin sonido
 ```
 
 ## Limitaciones
