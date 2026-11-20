@@ -16,7 +16,7 @@ dependencies = [
     "scipy>=1.18.1",
     "sounddevice>=0.5",
     # Linux: mouse/teclado por /dev/uinput
-    "evdev>=2.0.0; sys_platform == 'linux'",
+    "evdev-binary>=2.0.0; sys_platform == 'linux'",  # precompilado: no necesita compilador ni headers
     # Mac: mouse/teclado por Quartz (Windows usa SendInput con ctypes, sin dependencias)
     "pynput>=1.8; sys_platform == 'darwin'",
     "pyobjc-framework-quartz>=10; sys_platform == 'darwin'",
