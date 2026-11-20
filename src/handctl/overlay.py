@@ -13,7 +13,7 @@ import time
 import traceback
 
 import numpy as np
-from evdev import ecodes as e
+from .keycodes import IS_MAC, e
 from PyQt6.QtCore import QPointF, QRect, QRectF, Qt, QTimer
 from PyQt6.QtGui import QAction, QColor, QFont, QIcon, QImage, QPainter, QPen, QPixmap
 from PyQt6.QtWidgets import QApplication, QMenu, QSystemTrayIcon, QWidget
@@ -23,7 +23,7 @@ from .app import help_text, status_text
 GLYPHS = {e.KEY_BACKSPACE: "⌫", e.KEY_ENTER: "Enter ⏎", e.KEY_TAB: "Tab ⇥",
           e.KEY_LEFT: "←", e.KEY_RIGHT: "→", e.KEY_UP: "↑", e.KEY_DOWN: "↓",
           e.KEY_SPACE: "espacio"}
-KIND_GLYPHS = {"mode": "Mouse", "ctrl": "Ctrl"}
+KIND_GLYPHS = {"mode": "Mouse", "ctrl": "⌘ Cmd" if IS_MAC else "Ctrl"}
 FINGER_COLORS = {"index": QColor(255, 200, 0), "middle": QColor(0, 160, 255),
                  "ring": QColor(255, 70, 70), "pinky": QColor(220, 0, 220)}
 HAND_COLORS = {"left": QColor(255, 90, 200), "right": QColor(80, 220, 255)}
@@ -77,6 +77,8 @@ class Overlay(QWidget):
                          | Qt.WindowType.Tool)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
+        if IS_MAC:  # en Mac las ventanas "Tool" se esconden cuando la app no está activa
+            self.setAttribute(Qt.WidgetAttribute.WA_MacAlwaysShowToolWindow)
         self.setGeometry(screen.geometry())
         self.cfg = cfg
         # El mouse virtual es absoluto sobre el escritorio completo (todos los monitores).

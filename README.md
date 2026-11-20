@@ -1,12 +1,63 @@
 # handctl
 
-Controlá el mouse, escribí y dictá con las manos usando la webcam. Hand
-tracking con MediaPipe, entrada vía `/dev/uinput` (funciona en Wayland/KDE) y
-dictado con Whisper local en la GPU.
+[![tests](https://github.com/humodev/gesture_cam/actions/workflows/tests.yml/badge.svg)](https://github.com/humodev/gesture_cam/actions/workflows/tests.yml)
+
+Controlá la computadora con las manos usando la webcam: mouse, menú de
+gestos, dictado por voz, pizarrón para escribir sobre la pantalla e
+instrumentos musicales. Hand tracking con MediaPipe, todo local (nada sale de
+tu computadora). Funciona en **Linux, Windows y macOS**.
+
+## Instalación
+
+Necesitás una webcam y [uv](https://docs.astral.sh/uv/getting-started/installation/)
+(instala Python 3.12 solo). Después, en cualquier sistema:
+
+```sh
+git clone https://github.com/humodev/gesture_cam.git
+cd gesture_cam
+uv sync
+uv run handctl --calibrate   # la primera vez: ajusta la zona y el pellizco a tu mano
+```
+
+La primera vez descarga el modelo de manos (~8 MB) y, si usás dictado, Whisper (~1.6 GB).
+
+### 🐧 Linux
+
+- Probado en KDE Plasma (Wayland). El mouse y el teclado se inyectan por
+  `/dev/uinput`, así que funciona en Wayland y X11. Tu usuario necesita
+  permiso de escritura en `/dev/uinput`; si no lo tiene:
+  `sudo setfacl -m u:$USER:rw /dev/uinput` (o una regla de udev para que sea permanente).
+- El dictado pega por el portapapeles de KDE (Klipper); en otros escritorios
+  instalá `wl-clipboard` (Wayland) o `xclip` (X11).
+- Los atajos de escritorios y vista general son los de KDE; en GNOME u otros,
+  cambialos en `config.toml` (ver Configuración).
+- Dictado en GPU con NVIDIA (CUDA); sin NVIDIA: `voice_device = "cpu"` y `voice_model = "small"`.
+
+### 🪟 Windows (10/11)
+
+- No hace falta nada extra: el mouse y el teclado se manejan con la API de
+  Windows (`SendInput`).
+- La primera vez Windows pide permiso para usar la cámara y el micrófono.
+- No puede controlar ventanas de programas abiertos **como administrador**
+  (limitación de Windows), salvo que handctl también corra como administrador.
+- Dictado en GPU con NVIDIA (CUDA); sin NVIDIA: `voice_device = "cpu"` y `voice_model = "small"`.
+- Gestos de sistema: Win+Tab (vista de tareas), Ctrl+Win+←/→ (escritorios), Win+D.
+
+### 🍎 macOS (Apple Silicon: M1 o posterior)
+
+- Las Mac con Intel **no** están soportadas: MediaPipe no publica versión para ellas.
+- Dar permisos en **Ajustes del Sistema → Privacidad y seguridad** a la app
+  desde la que lo corrés (Terminal, iTerm…):
+  - **Cámara** y **Micrófono** (los pide la primera vez),
+  - **Accesibilidad** (para mover el mouse y escribir; hay que agregarla a mano).
+  Después de darlos, cerrá y volvé a abrir la terminal.
+- Copiar/pegar/deshacer usan ⌘; el teclado en pantalla tiene ⌘ Cmd en vez de Ctrl.
+- Dictado en CPU con el modelo `small` (no hay CUDA en Mac).
+- Gestos de sistema: Ctrl+↑ (Mission Control), Ctrl+←/→ (Spaces), F11 (escritorio).
 
 ## Uso
 
-```fish
+```sh
 uv run handctl --calibrate  # la primera vez: ajusta zona y pellizco a tu mano
 uv run handctl              # control real
 uv run handctl --dry-run    # practicar sin mover nada
@@ -149,7 +200,8 @@ podés escribir en cualquier app que esté debajo.
 
 ## Configuración
 
-Tus valores van en `~/.config/handctl/config.toml`. `--calibrate` escribe ahí
+Tus valores van en `~/.config/handctl/config.toml` (en Windows:
+`C:\Users\<vos>\.config\handctl\config.toml`). `--calibrate` escribe ahí
 la zona y los umbrales de pellizco. Ejemplo:
 
 ```toml
@@ -160,23 +212,31 @@ voice_paste = "ctrl+shift+v"  # si dictás sobre todo en la terminal
 swipe_up = "meta+tab"
 overlay_screen = "HDMI-A-1"   # monitor del overlay (vacío = principal)
 overlay_preview_width = 0     # ocultar la cámara en miniatura
-launcher_items = ["copiar", "pegar", "deshacer", "play_pausa", "volumen", "dictar", "apps", "Reabrir=ctrl+shift+t"]
+launcher_items = ["copiar", "pegar", "deshacer", "play_pausa", "volumen", "dictar", "apps", "Reabrir=primary+shift+t"]
+# GNOME (Linux): swipe_up = "super", swipe_left = "super+pageup", swipe_right = "super+pagedown"
 ```
+
+En los atajos, `primary` es Ctrl en Linux y Windows y ⌘ en Mac. También
+existen `ctrl`, `shift`, `alt` (`option`), `meta` (`win`, `cmd`, `super`).
 
 Todas las claves, con su explicación, están en `src/handctl/config.py`.
 
 ## Pruebas
 
-```fish
+```sh
+uv run python tests/test_plataformas.py   # backends de mouse/teclado de Linux, Windows y Mac (sin eventos reales)
 uv run python tests/test_gestos.py        # lógica de gestos con manos sintéticas (sin cámara)
 uv run python tests/test_instrumentos.py  # cada instrumento abierto desde el menú, sin sonido
 ```
 
 ## Limitaciones
 
-- El teclado en pantalla sigue el layout US: sin `ñ` ni tildes (el dictado sí las escribe).
-- El dictado pega con `Ctrl+V` vía Klipper y después restaura tu portapapeles.
-  En terminales hace falta `voice_paste = "ctrl+shift+v"`.
+- El teclado en pantalla manda teclas físicas: en Linux y Windows siguen tu
+  layout de teclado; no tiene `ñ` ni tildes (el dictado sí las escribe).
+- El dictado pega con Ctrl+V (⌘V en Mac) por el portapapeles y después lo
+  restaura. En terminales de Linux/Windows hace falta `voice_paste = "ctrl+shift+v"`.
+- Probado a fondo en Linux (KDE Plasma). Windows y macOS pasan las pruebas
+  automáticas, pero todavía no se probaron con manos reales.
 - Necesita buena luz. Con poca luz aumentan el desenfoque y los clics falsos.
 - Si las manos se cruzan, se intercambian los roles.
 - Con varios monitores, el cursor recorre el escritorio completo (todos los

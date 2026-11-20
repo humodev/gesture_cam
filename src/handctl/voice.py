@@ -2,8 +2,8 @@
 
 Pulsar para hablar: se graba mientras dura el pellizco, al soltar se
 transcribe en segundo plano y el texto se pega en la ventana con foco.
-Se pega vía el portapapeles de KDE (Klipper) porque el teclado virtual solo
-puede mandar teclas del layout US: así llegan tildes, ñ, ¿ y ¡.
+Se pega vía el portapapeles (Klipper en KDE; pyperclip en Windows/Mac)
+porque el teclado virtual solo manda teclas: así llegan tildes, ñ, ¿ y ¡.
 """
 
 import ctypes
@@ -12,6 +12,7 @@ import os
 import shutil
 import site
 import subprocess
+import sys
 import threading
 import time
 
@@ -25,6 +26,14 @@ HALLUCINATIONS = ("gracias por ver", "subtítulos", "suscríbete", "amara.org", 
 def _preload_cuda_libs() -> None:
     """faster-whisper busca cuBLAS/cuDNN en el sistema; acá vienen de los
     paquetes pip nvidia-*, así que se cargan a mano antes de importarlo."""
+    if sys.platform == "darwin":
+        return
+    if sys.platform == "win32":  # en Windows alcanza con sumar sus carpetas bin/ a la búsqueda de DLLs
+        for sp in site.getsitepackages():
+            for d in glob.glob(os.path.join(sp, "nvidia", "*", "bin")):
+                os.add_dll_directory(d)
+                os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
+        return
     for sp in site.getsitepackages():
         for pattern in ("nvidia/cublas/lib/libcublas*.so*", "nvidia/cudnn/lib/libcudnn*.so*"):
             for lib in sorted(glob.glob(os.path.join(sp, pattern))):
@@ -52,6 +61,31 @@ class Klipper:
         return self._call("setClipboardContents", text) is not None
 
 
+class SystemClipboard:
+    """Windows/Mac (y Linux sin KDE, si hay wl-clipboard o xclip)."""
+
+    def get(self) -> str | None:
+        import pyperclip
+        try:
+            return pyperclip.paste()
+        except pyperclip.PyperclipException:
+            return None
+
+    def set(self, text: str) -> bool:
+        import pyperclip
+        try:
+            pyperclip.copy(text)
+            return True
+        except pyperclip.PyperclipException:
+            return False
+
+
+def make_clipboard():
+    if sys.platform.startswith("linux") and (shutil.which("qdbus6") or shutil.which("qdbus")):
+        return Klipper()
+    return SystemClipboard()
+
+
 class Dictation:
     def __init__(self, cfg, kbd, paste: bool = True):
         self.cfg, self.kbd, self.paste = cfg, kbd, paste
@@ -59,7 +93,7 @@ class Dictation:
         self.message = "cargando Whisper..."
         self.level = 0.0
         self.model = None
-        self.clipboard = Klipper()
+        self.clipboard = make_clipboard()
         self._chunks: list[np.ndarray] = []
         self._stream = None
         threading.Thread(target=self._load, daemon=True).start()
@@ -121,7 +155,7 @@ class Dictation:
                 self.message = "(no se entendió)"
                 return
             if self.paste and not self._paste(text + " "):
-                self.message = "Klipper no responde"
+                self.message = "no se pudo usar el portapapeles"
             else:
                 self.message = f"«{text}»"
         except Exception as ex:

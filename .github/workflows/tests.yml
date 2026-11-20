@@ -1,0 +1,30 @@
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONIOENCODING: utf-8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: Librerías del sistema (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 libgl1 libegl1 libxkbcommon0 libfontconfig1 libdbus-1-3
+      - name: Dependencias (sin CUDA)
+        run: uv sync --python 3.12 --no-install-package nvidia-cublas-cu12 --no-install-package nvidia-cudnn-cu12
+      - name: Backends de entrada
+        run: uv run python tests/test_plataformas.py
+      - name: Gestos
+        run: uv run python tests/test_gestos.py
+      - name: Instrumentos y apps
+        run: uv run python tests/test_instrumentos.py

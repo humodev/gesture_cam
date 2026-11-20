@@ -15,7 +15,7 @@ import threading
 import traceback
 from collections import deque
 
-from evdev import ecodes as e
+from .keycodes import e
 
 from .filters import OneEuro2D
 from .gestures import (Debounced, PinchDetector, curled_count, finger_states, hand_pose,

@@ -7,7 +7,7 @@ tenga el foco, no a la vista previa.
 from dataclasses import dataclass
 
 import cv2
-from evdev import ecodes as e
+from .keycodes import IS_MAC, PRIMARY, e
 
 
 @dataclass
@@ -41,14 +41,14 @@ ROWS: list[list[Key]] = [
     + _chars("zxcvbnm,./", "ZXCVBNM<>?",
              [e.KEY_Z, e.KEY_X, e.KEY_C, e.KEY_V, e.KEY_B, e.KEY_N, e.KEY_M,
               e.KEY_COMMA, e.KEY_DOT, e.KEY_SLASH]),
-    [Key("Mouse", kind="mode", width=2.0), Key("Ctrl", kind="ctrl", width=1.5),
+    [Key("Mouse", kind="mode", width=2.0), Key("Cmd" if IS_MAC else "Ctrl", kind="ctrl", width=1.5),
      Key("Space", e.KEY_SPACE, width=5.0),
      Key("<", e.KEY_LEFT, repeat=True), Key("^", e.KEY_UP, repeat=True),
      Key("v", e.KEY_DOWN, repeat=True), Key(">", e.KEY_RIGHT, repeat=True)],
 ]
 
 KEYCODES = {k.code for row in ROWS for k in row if k.code is not None} | {
-    e.KEY_LEFTSHIFT, e.KEY_LEFTCTRL}
+    e.KEY_LEFTSHIFT, PRIMARY}
 
 SHIFT_OFF, SHIFT_ONCE, SHIFT_LOCK = 0, 1, 2
 
@@ -100,7 +100,7 @@ class OnScreenKeyboard:
             return None
         mods = []
         if self.ctrl:
-            mods.append(e.KEY_LEFTCTRL)
+            mods.append(PRIMARY)  # Ctrl (⌘ en Mac): Ctrl+C del teclado = copiar en todos
         if self.shift and key.shift_label:
             mods.append(e.KEY_LEFTSHIFT)
         kbd.tap(key.code, tuple(mods))

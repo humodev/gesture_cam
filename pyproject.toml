@@ -1,22 +1,30 @@
 [project]
 name = "handctl"
-version = "0.1.0"
-description = "Add your description here"
+version = "0.2.0"
+description = "Controlá la computadora con las manos usando la webcam: mouse, menú de gestos, dictado, pizarrón e instrumentos."
 readme = "README.md"
 authors = [
     { name = "Diego Maidana", email = "diegomaidana2@gmail.com" }
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "evdev>=2.0.0",
     "faster-whisper>=1.2.1",
     "mediapipe>=1.2.3",
     "numpy>=2.5.5",
-    "nvidia-cublas-cu12>=12.9.3.13",
-    "nvidia-cudnn-cu12>=9,<10",
     "opencv-python>=5.1.0.95",
     "pyqt6>=6.12.1",
     "scipy>=1.18.1",
+    "sounddevice>=0.5",
+    # Linux: mouse/teclado por /dev/uinput
+    "evdev>=2.0.0; sys_platform == 'linux'",
+    # Mac: mouse/teclado por Quartz (Windows usa SendInput con ctypes, sin dependencias)
+    "pynput>=1.8; sys_platform == 'darwin'",
+    "pyobjc-framework-quartz>=10; sys_platform == 'darwin'",
+    # Portapapeles para el dictado fuera de KDE
+    "pyperclip>=1.9; sys_platform != 'linux'",
+    # CUDA para Whisper en GPU NVIDIA (no existe en Mac)
+    "nvidia-cublas-cu12>=12.8,<12.9.3; sys_platform != 'darwin'",  # 12.9.3 no tiene paquete para Windows
+    "nvidia-cudnn-cu12>=9,<10; sys_platform != 'darwin'",
 ]
 
 [project.scripts]

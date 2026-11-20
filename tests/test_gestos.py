@@ -152,7 +152,7 @@ def test_puno_abre_menu_y_copia():
     s.open_menu()
     moves = len(s.mouse.names("move"))
     s.choose(index_of(s, "Copiar"))
-    assert s.kbd.names("combo") == [("ctrl+c",)], s.kbd.calls
+    assert s.kbd.names("combo") == [("primary+c",)], s.kbd.calls
     assert s.ctl.mode == "mouse"
     assert not s.mouse.presses(), "elegir en el menú no hace clic"
     assert len(s.mouse.names("move")) > moves  # vuelve a mover el cursor

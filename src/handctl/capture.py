@@ -1,6 +1,7 @@
 """Cámara + MediaPipe: entrega frames espejados con los landmarks de las manos."""
 
 import shutil
+import sys
 import subprocess
 import time
 import urllib.request
@@ -22,8 +23,13 @@ def ensure_model(path: Path) -> None:
         urllib.request.urlretrieve(MODEL_URL, path)
 
 
+# Backend de captura nativo de cada sistema (DirectShow acepta MJPG en Windows).
+CAMERA_BACKEND = (cv2.CAP_DSHOW if sys.platform == "win32" else
+                  cv2.CAP_AVFOUNDATION if sys.platform == "darwin" else cv2.CAP_V4L2)
+
+
 def open_camera(cfg) -> cv2.VideoCapture:
-    cap = cv2.VideoCapture(cfg.camera, cv2.CAP_V4L2)
+    cap = cv2.VideoCapture(cfg.camera, CAMERA_BACKEND)
     # MJPG: en YUYV muchas webcams USB no llegan a 30 FPS.
     cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, cfg.cam_width)

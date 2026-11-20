@@ -8,6 +8,8 @@ import tomllib
 from dataclasses import asdict, dataclass, fields
 from pathlib import Path
 
+from .keycodes import IS_MAC, SHORTCUTS
+
 CONFIG_PATH = Path.home() / ".config" / "handctl" / "config.toml"
 
 
@@ -88,10 +90,11 @@ class Config:
     # El deslizamiento se confirma tras este tiempo si la mano sigue en juego:
     # bajar la mano a descansar o sacarla de cuadro no cuenta como gesto.
     swipe_confirm_s: float = 0.2
-    swipe_left: str = "ctrl+meta+left"    # escritorio anterior
-    swipe_right: str = "ctrl+meta+right"  # escritorio siguiente
-    swipe_up: str = "meta+w"              # vista general
-    swipe_down: str = "meta+d"            # mostrar escritorio
+    # Por defecto, los atajos de cada sistema (ver keycodes.SHORTCUTS).
+    swipe_left: str = SHORTCUTS["desk_left"]       # escritorio anterior
+    swipe_right: str = SHORTCUTS["desk_right"]     # escritorio siguiente
+    swipe_up: str = SHORTCUTS["overview"]          # vista general
+    swipe_down: str = SHORTCUTS["show_desktop"]    # mostrar escritorio
 
     # Teclado: auto-repetición al mantener el pellizco en ⌫ / flechas
     repeat_delay_s: float = 0.45
@@ -102,11 +105,11 @@ class Config:
     # Dictado (pellizco con el anular mantenido = grabar; o "Dictar" en el
     # lanzador = grabar hasta el próximo pellizco, con las manos libres)
     voice_enabled: bool = True       # o --no-voice
-    voice_model: str = "large-v3-turbo"
+    voice_model: str = "small" if IS_MAC else "large-v3-turbo"  # Mac: sin CUDA
     voice_language: str = "es"
-    voice_device: str = "cuda"       # "cpu" si no hay GPU
+    voice_device: str = "cpu" if IS_MAC else "cuda"  # "cpu" si no hay GPU NVIDIA
     # Tecla para pegar el texto dictado. En terminales: "ctrl+shift+v".
-    voice_paste: str = "ctrl+v"
+    voice_paste: str = "primary+v"  # primary = Ctrl (⌘ en Mac)
 
     # Segundos sin mano antes de soltar botones y resetear filtros
     lost_hand_s: float = 0.3

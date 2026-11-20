@@ -21,26 +21,28 @@ import math
 from collections import deque
 from dataclasses import dataclass
 
+from .keycodes import SHORTCUTS
+
 # Opciones disponibles para `launcher_items` (config). kind: combo = atajo de
 # teclado; el resto lo resuelve el controller.
 CATALOG: dict[str, tuple[str, str, str, str]] = {
     # nombre: (título, ícono, kind, atajo)
-    "copiar": ("Copiar", "📋", "combo", "ctrl+c"),
-    "pegar": ("Pegar", "📥", "combo", "ctrl+v"),
-    "deshacer": ("Deshacer", "↶", "combo", "ctrl+z"),
-    "rehacer": ("Rehacer", "↷", "combo", "ctrl+shift+z"),
-    "cerrar_pestana": ("Cerrar pestaña", "✕", "combo", "ctrl+w"),
-    "nueva_pestana": ("Nueva pestaña", "＋", "combo", "ctrl+t"),
-    "guardar": ("Guardar", "💾", "combo", "ctrl+s"),
+    "copiar": ("Copiar", "📋", "combo", "primary+c"),
+    "pegar": ("Pegar", "📥", "combo", "primary+v"),
+    "deshacer": ("Deshacer", "↶", "combo", "primary+z"),
+    "rehacer": ("Rehacer", "↷", "combo", "primary+shift+z"),
+    "cerrar_pestana": ("Cerrar pestaña", "✕", "combo", "primary+w"),
+    "nueva_pestana": ("Nueva pestaña", "＋", "combo", "primary+t"),
+    "guardar": ("Guardar", "💾", "combo", "primary+s"),
     "enter": ("Enter", "⏎", "combo", "enter"),
     "escape": ("Escape", "⎋", "combo", "esc"),
     "play_pausa": ("Play / pausa", "⏯", "combo", "playpause"),
     "siguiente": ("Siguiente", "⏭", "combo", "nextsong"),
     "anterior": ("Anterior", "⏮", "combo", "previoussong"),
     "silencio": ("Silenciar", "🔇", "combo", "mute"),
-    "vista_general": ("Vista general", "▦", "combo", "meta+w"),
-    "escritorio_izq": ("Escritorio ←", "⇠", "combo", "ctrl+meta+left"),
-    "escritorio_der": ("Escritorio →", "⇢", "combo", "ctrl+meta+right"),
+    "vista_general": ("Vista general", "▦", "combo", SHORTCUTS["overview"]),
+    "escritorio_izq": ("Escritorio ←", "⇠", "combo", SHORTCUTS["desk_left"]),
+    "escritorio_der": ("Escritorio →", "⇢", "combo", SHORTCUTS["desk_right"]),
     "volumen": ("Volumen", "🔊", "volume", ""),
     "teclado": ("Teclado", "⌨", "keyboard", ""),
     "dictar": ("Dictar", "🎤", "dictate", ""),

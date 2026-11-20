@@ -2,7 +2,10 @@
 
 import os
 
-os.environ.setdefault("QT_QPA_PLATFORM", "xcb")  # la ventana de OpenCV corre sobre XWayland
+import sys
+
+if sys.platform.startswith("linux"):
+    os.environ.setdefault("QT_QPA_PLATFORM", "xcb")  # overlay y OpenCV sobre XWayland
 
 import argparse
 import math
