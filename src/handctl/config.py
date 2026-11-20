@@ -60,9 +60,22 @@ class Config:
     click_lookback_s: float = 0.10
     click_freeze_s: float = 0.25
 
-    # Poses mantenidas: puño = abrir/cerrar teclado; pulgar arriba = pausa.
+    # Poses mantenidas: puño = lanzador (o cerrar teclado/app); pulgar arriba = pausa.
     mode_hold_s: float = 0.5
     pause_hold_s: float = 0.8
+    # Si la mano se mueve más que esto (fracción del alto de imagen) mientras
+    # mantiene la pose, el conteo vuelve a cero: agarrar un vaso no abre nada.
+    pose_still: float = 0.08
+
+    # Lanzador (menú radial con ✊). Opciones en orden horario desde arriba;
+    # nombres de launcher.CATALOG o "Título=atajo" (p.ej. "Reabrir=ctrl+shift+t").
+    launcher_items: tuple[str, ...] = ("copiar", "pegar", "deshacer", "cerrar_pestana",
+                                       "play_pausa", "volumen", "dictar", "teclado",
+                                       "apps", "ayuda")
+    launcher_dead_zone: float = 0.06  # cuánto mover la palma (fracción del alto de imagen) para elegir
+    launcher_arm_s: float = 0.2       # mano abierta y quieta antes de aceptar pellizcos
+    launcher_timeout_s: float = 8.0   # se cierra solo tras este tiempo sin uso
+    volume_step: float = 0.03         # desplazamiento vertical por paso de volumen
 
     # Scroll con la mano en "V" (índice y medio extendidos)
     scroll_speed: float = 4800.0     # unidades hi-res (120 = 1 paso) por unidad de mano
@@ -72,6 +85,9 @@ class Config:
     # Gestos de sistema: deslizar la mano secundaria abierta (solo con 2 manos).
     swipe_speed: float = 1.8         # anchos de cámara por segundo
     swipe_cooldown_s: float = 0.8
+    # El deslizamiento se confirma tras este tiempo si la mano sigue en juego:
+    # bajar la mano a descansar o sacarla de cuadro no cuenta como gesto.
+    swipe_confirm_s: float = 0.2
     swipe_left: str = "ctrl+meta+left"    # escritorio anterior
     swipe_right: str = "ctrl+meta+right"  # escritorio siguiente
     swipe_up: str = "meta+w"              # vista general
@@ -83,7 +99,8 @@ class Config:
     # Margen (fracción de tecla) que hay que salir de una tecla para cambiar de hover
     key_stickiness: float = 0.2
 
-    # Dictado (pellizco con el anular mantenido = grabar)
+    # Dictado (pellizco con el anular mantenido = grabar; o "Dictar" en el
+    # lanzador = grabar hasta el próximo pellizco, con las manos libres)
     voice_enabled: bool = True       # o --no-voice
     voice_model: str = "large-v3-turbo"
     voice_language: str = "es"

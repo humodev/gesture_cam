@@ -7,6 +7,14 @@ reserva dos gestos, que las apps no deben usar:
 
   - 👍 pulgar arriba mantenido: pausa / reanudar (global).
   - ✊ puño mantenido: cerrar la app (y abrir/cerrar el lanzador de apps).
+    Las poses cuentan solo con la mano quieta: si la palma se aleja más de
+    cfg.pose_still de donde empezó la pose, el conteo vuelve a cero (un puño
+    que va y viene en recorridos grandes no cierra la app).
+
+Se abren desde el lanzador (✊ en modo mouse → "Apps"). Mientras el host está
+en pausa la app sigue abierta pero `update` recibe `hands=[]` (soltar notas).
+Si `open`, `update` o `paint` tiran una excepción, el host cierra la app
+(llama a `close`) y vuelve al modo mouse.
 
 Hilos:
   - update() corre en el hilo de control (~30 veces/s) con `ctl.lock` tomado.
