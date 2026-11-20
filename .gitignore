@@ -1,0 +1,5 @@
+recordings/
+.venv/
+__pycache__/
+*.pyc
+models/*.task
